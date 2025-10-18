@@ -50,9 +50,23 @@ impl OutputPrinter {
 
         let table_string = table.to_string();
         for line in table_string.lines() {
-            writeln!(writer, "{}{}", MARGIN, line).ok();
+            let line = Self::colorize_borders(line);
+            let line = MARGIN.to_string() + &line;
+            writeln!(writer, "{}", line).ok();
         }
         writeln!(writer).ok();
+    }
+
+    /// comfy-table doesn't support styling borders directly. This function is a hack to apply styling to the UTF-8 border characters after the table is rendered to a string.
+    fn colorize_borders(line: &str) -> String {
+        line.chars()
+            .map(|c| match c {
+                '╭' | '╮' | '╰' | '╯' | '─' | '│' | '┆' | '╞' | '╡' | '═' => {
+                    format!("{}", c.to_string().dimmed())
+                }
+                _ => c.to_string(),
+            })
+            .collect()
     }
 
     fn format_datetime(datetime: &DateTime<Utc>, format: &OutputFormat) -> Result<String> {
