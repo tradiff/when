@@ -1,11 +1,11 @@
 mod config;
+mod input_parser;
 mod output_printer;
 
 use anyhow::{Context, Result};
-use chrono::{DateTime, Utc};
 use clap::Parser;
-use colored::Colorize;
 use config::Settings;
+use input_parser::InputParser;
 use output_printer::OutputPrinter;
 
 /// Parse timestamps in various formats
@@ -23,96 +23,20 @@ fn main() -> Result<()> {
 
     let args = Args::parse();
 
-    let datetime = parse_input(args.timestamp)?;
+    let datetime = InputParser::parse(args.timestamp)?;
     OutputPrinter::print(&mut std::io::stdout(), &datetime, &settings);
 
     Ok(())
 }
 
-fn parse_input(timestamp: Option<String>) -> Result<DateTime<Utc>> {
-    if let Some(input) = timestamp {
-        println!(
-            "{} {}",
-            "•".bright_blue(),
-            format!("Parsing: '{}'", input).dimmed()
-        );
-        parse_timestamp(&input).context("Failed to parse timestamp")
-    } else {
-        println!(
-            "{} {}",
-            "•".bright_blue(),
-            "Using current date/time".dimmed()
-        );
-        Ok(Utc::now())
-    }
-}
-
-fn parse_timestamp(input: &str) -> Result<DateTime<Utc>> {
-    if let Ok(dt) = dateparser::parse(input) {
-        return Ok(dt.with_timezone(&Utc));
-    }
-
-    anyhow::bail!("Unable to parse timestamp: '{}'", input)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::Datelike;
-
-    #[test]
-    fn test_parse_timestamp_unix_timestamp() {
-        let input = "1136214245";
-        let result = parse_timestamp(input);
-        assert!(result.is_ok());
-        let dt = result.unwrap();
-        assert_eq!(dt.timestamp(), 1136214245);
-    }
-
-    #[test]
-    fn test_parse_timestamp_human_readable() {
-        let input = "January 2, 2006 3:04:05 PM";
-        let result = parse_timestamp(input);
-        assert!(result.is_ok());
-        let dt = result.unwrap();
-        assert_eq!(dt.year(), 2006);
-        assert_eq!(dt.month(), 1);
-        assert_eq!(dt.day(), 2);
-    }
-
-    #[test]
-    fn test_parse_timestamp_invalid() {
-        let input = "not a valid timestamp";
-        let result = parse_timestamp(input);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_parse_input_none() {
-        let result = parse_input(None);
-        assert!(result.is_ok());
-        // Should return current time, just verify it's close to now
-        let dt = result.unwrap();
-        let now = Utc::now();
-        let diff = (now.timestamp() - dt.timestamp()).abs();
-        assert!(diff < 2); // Within 2 seconds
-    }
-
-    #[test]
-    fn test_parse_timestamp_rfc2822() {
-        let input = "January 2, 2006 3:04:05 PM";
-        let result = parse_timestamp(input);
-        assert!(result.is_ok());
-        let dt = result.unwrap();
-        assert_eq!(dt.year(), 2006);
-        assert_eq!(dt.month(), 1);
-        assert_eq!(dt.day(), 2);
-    }
+    use chrono::{TimeZone, Utc};
 
     #[test]
     fn test_print_output() {
         // Create a known datetime
-        use chrono::TimeZone;
         let dt = Utc.with_ymd_and_hms(2006, 1, 2, 15, 4, 5).unwrap();
 
         // Use default settings
