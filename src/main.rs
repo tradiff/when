@@ -1,6 +1,9 @@
+mod config;
+
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use clap::Parser;
+use config::Settings;
 
 /// Parse timestamps in various formats
 #[derive(Parser, Debug)]
@@ -12,6 +15,12 @@ struct Args {
 }
 
 fn main() -> Result<()> {
+    // Load configuration
+    let _settings = Settings::new().context("Failed to load configuration")?;
+
+    // For demonstration: you can access config values
+    println!("Config - foo: {}, bar: {}", _settings.foo, _settings.bar);
+
     let args = Args::parse();
 
     let datetime = parse_input(args.timestamp)?;

@@ -1,0 +1,6 @@
+# Example configuration file for the 'when' application
+# Copy this file to ~/.config/when.toml
+
+# Placeholder configuration values
+foo = "example_value"
+bar = 123
