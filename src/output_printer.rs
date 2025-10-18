@@ -1,37 +1,26 @@
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use chrono_tz::Tz;
-use comfy_table::modifiers::UTF8_ROUND_CORNERS;
-use comfy_table::presets::UTF8_BORDERS_ONLY;
-use comfy_table::{Cell, Color, ContentArrangement, Table};
+use comfy_table::{Cell, Color, ContentArrangement, Table, presets};
 
 use crate::config::{OutputFormat, Settings};
 
-const MARGIN: &str = "  ";
 const RESET_STYLE: &str = "\x1b[0m";
-const TITLE_STYLE: &str = "\x1b[0m\x1b[38;5;13m"; // bright magenta
 const LABEL_STYLE: &str = "\x1b[0m\x1b[38;5;178m"; // bold amber
 const DATE_STYLE: &str = "\x1b[0m\x1b[38;5;37m"; // soft teal
 const TIME_STYLE: &str = "\x1b[0m\x1b[1m\x1b[38;5;75m"; // sky blue
-const PUNCTUATION_STYLE: &str = "\x1b[0m\x1b[2m\x1b[38;5;240m"; // dim slate
-const BORDER_STYLE: &str = "\x1b[0m\x1b[2m\x1b[38;5;240m"; // dim
+const PUNCTUATION_STYLE: &str = "\x1b[0m\x1b[2m"; // dimmed
+const ZONE_STYLE: &str = "\x1b[0m\x1b[2m"; // dimmed
 
 pub struct OutputPrinter;
 
 impl OutputPrinter {
     pub fn print<W: std::io::Write>(writer: &mut W, datetime: &DateTime<Utc>, settings: &Settings) {
         writeln!(writer).ok();
-        writeln!(
-            writer,
-            "{}{}{}{}",
-            MARGIN, TITLE_STYLE, "Timestamp Conversions", RESET_STYLE
-        )
-        .ok();
 
         let mut table = Table::new();
         table
-            .load_preset(UTF8_BORDERS_ONLY)
-            .apply_modifier(UTF8_ROUND_CORNERS)
+            .load_preset(presets::NOTHING)
             .set_content_arrangement(ContentArrangement::Dynamic);
 
         for output in &settings.outputs {
@@ -55,23 +44,9 @@ impl OutputPrinter {
 
         let table_string = table.to_string();
         for line in table_string.lines() {
-            let line = Self::colorize_borders(line);
-            let line = MARGIN.to_string() + &line;
             writeln!(writer, "{}", line).ok();
         }
         writeln!(writer).ok();
-    }
-
-    /// comfy-table doesn't support styling borders directly. This function is a hack to apply styling to the UTF-8 border characters after the table is rendered to a string.
-    fn colorize_borders(line: &str) -> String {
-        line.chars()
-            .map(|c| match c {
-                '╭' | '╮' | '╰' | '╯' | '─' | '│' | '┆' | '╞' | '╡' | '═' => {
-                    format!("{}{}{}", BORDER_STYLE, c, RESET_STYLE)
-                }
-                _ => c.to_string(),
-            })
-            .collect()
     }
 
     fn format_datetime(datetime: &DateTime<Utc>, format: &OutputFormat) -> Result<String> {
@@ -163,40 +138,42 @@ impl OutputPrinter {
     }
 
     fn colorize_custom_format(format: &str) -> String {
-        // Date-related specifiers from chrono's strftime
-        let date_specifiers = [
-            "%Y", "%y", "%C", "%m", "%d", "%e", "%j", "%U", "%W", "%G", "%g", "%V", "%a", "%A",
-            "%a,", "%A,", "%b", "%B", "%h", "%D", "%F", "%v", "%-m", "%-d", "%-e", "%-j",
-        ];
-
-        // Time-related specifiers from chrono's strftime
-        let time_specifiers = [
-            "%H:", "%H", "%I", "%I:", "%-I", "%-I:", "%M", "%M:", "%S", "%f", "%p", "%P", "%R",
-            "%T", "%r", "%.3f", "%.6f", "%.9f", "%3f", "%6f", "%9f",
+        // Map each style to its associated format specifiers
+        // https://docs.rs/chrono/latest/chrono/format/strftime/index.html
+        let style_specifiers = [
+            (
+                DATE_STYLE,
+                vec![
+                    "%Y", "%C", "%y", "%q", "%m", "%b", "%B", "%h", "%d", "%e", "%a,", "%a", "%A,",
+                    "%A", "%w", "%u", "%U", "%W", "%G", "%g", "%V", "%j", "%D", "%x", "%F", "%v",
+                ],
+            ),
+            (
+                TIME_STYLE,
+                vec![
+                    "%H:", "%H", "%k:", "%k", "%-I:", "%_I:", "%0I:", "%I:", "%-I", "%_I", "%0I",
+                    "%I", "%l:", "%l", "%P", "%p", "%M:", "%M", "%S:", "%S", "%f", "%.f", "%.3f",
+                    "%.6f", "%9f", "%3f", "%6f", "%9f", "%R", "%T", "%X", "%r",
+                ],
+            ),
+            (ZONE_STYLE, vec!["%Z", "%z", "%:z", "%::z", "%:::z"]),
         ];
 
         let mut result = format.to_string();
 
-        let mut sorted_time_specs = time_specifiers.to_vec();
-        sorted_time_specs.sort_by_key(|s| std::cmp::Reverse(s.len()));
-
-        for spec in sorted_time_specs {
-            // Only colorize if the specifier is not already wrapped in color codes
-            if result.contains(spec) && !result.contains(&format!("{}{}", TIME_STYLE, spec)) {
-                result = result.replace(spec, &format!("{}{}{}", TIME_STYLE, spec, RESET_STYLE));
-            }
-        }
-
-        let mut sorted_date_specs = date_specifiers.to_vec();
-        sorted_date_specs.sort_by_key(|s| std::cmp::Reverse(s.len()));
-
-        for spec in sorted_date_specs {
-            // Only colorize if the specifier is not already wrapped in color codes
-            if result.contains(spec)
-                && !result.contains(&format!("{}{}", DATE_STYLE, spec))
-                && !result.contains(&format!("{}{}", TIME_STYLE, spec))
-            {
-                result = result.replace(spec, &format!("{}{}{}", DATE_STYLE, spec, RESET_STYLE));
+        for (style, specifiers) in style_specifiers {
+            for timestamp_specifier in specifiers {
+                // Only colorize if the specifier is not already wrapped in color codes
+                if result.contains(timestamp_specifier)
+                    && !result.contains(&format!("{}{}", DATE_STYLE, timestamp_specifier))
+                    && !result.contains(&format!("{}{}", TIME_STYLE, timestamp_specifier))
+                    && !result.contains(&format!("{}{}", ZONE_STYLE, timestamp_specifier))
+                {
+                    result = result.replace(
+                        timestamp_specifier,
+                        &format!("{}{}{}", style, timestamp_specifier, RESET_STYLE),
+                    );
+                }
             }
         }
 

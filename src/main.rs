@@ -48,7 +48,6 @@ mod tests {
         let output_str = String::from_utf8(output).unwrap();
 
         // Verify the output contains expected strings (without color codes for testing)
-        assert!(output_str.contains("Timestamp Conversions"));
         assert!(output_str.contains("2006-01-02"));
         assert!(output_str.contains("Local"));
         assert!(output_str.contains("UTC"));
