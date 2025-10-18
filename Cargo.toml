@@ -9,3 +9,5 @@ authors = [""]
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }
 anyhow = "1.0"
+chrono = "0.4"
+dateparser = "0.2"
