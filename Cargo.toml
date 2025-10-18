@@ -17,3 +17,4 @@ serde = { version = "1.0", features = ["derive"] }
 dirs = "6.0.0"
 colored = "3.0.0"
 comfy-table = "7.2.1"
+chrono-english = "0.1.8"
