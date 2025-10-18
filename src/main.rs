@@ -4,6 +4,10 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
 use chrono_tz::Tz;
 use clap::Parser;
+use colored::Colorize;
+use comfy_table::modifiers::UTF8_ROUND_CORNERS;
+use comfy_table::presets::UTF8_BORDERS_ONLY;
+use comfy_table::{Attribute, Cell, Color, ContentArrangement, Table};
 use config::{OutputFormat, Settings};
 
 /// Parse timestamps in various formats
@@ -29,10 +33,18 @@ fn main() -> Result<()> {
 
 fn parse_input(timestamp: Option<String>) -> Result<DateTime<Utc>> {
     if let Some(input) = timestamp {
-        println!("Parsing input: '{}'", input);
+        println!(
+            "{} {}",
+            "•".bright_blue(),
+            format!("Parsing: '{}'", input).dimmed()
+        );
         parse_timestamp(&input).context("Failed to parse timestamp")
     } else {
-        println!("Using current date/time");
+        println!(
+            "{} {}",
+            "•".bright_blue(),
+            "Using current date/time".dimmed()
+        );
         Ok(Utc::now())
     }
 }
@@ -46,28 +58,46 @@ fn parse_timestamp(input: &str) -> Result<DateTime<Utc>> {
 }
 
 fn print_output<W: std::io::Write>(writer: &mut W, datetime: &DateTime<Utc>, settings: &Settings) {
+    writeln!(writer).ok();
+    let margin = "  ";
+    writeln!(
+        writer,
+        "{}{}",
+        margin,
+        "Timestamp Conversions".bold().bright_cyan()
+    )
+    .ok();
+
+    let mut table = Table::new();
+    table
+        .load_preset(UTF8_BORDERS_ONLY)
+        .apply_modifier(UTF8_ROUND_CORNERS)
+        .set_content_arrangement(ContentArrangement::Dynamic);
+
     for output in &settings.outputs {
         match format_datetime(datetime, &output.format) {
             Ok(formatted) => {
-                writeln!(
-                    writer,
-                    "  {:<10} {}",
-                    format!("{}:", output.label),
-                    formatted
-                )
-                .ok();
+                table.add_row(vec![
+                    Cell::new(&output.label).fg(Color::Yellow),
+                    Cell::new(formatted).fg(Color::White),
+                ]);
             }
             Err(e) => {
-                writeln!(
-                    writer,
-                    "  {:<10} Error: {}",
-                    format!("{}:", output.label),
-                    e
-                )
-                .ok();
+                table.add_row(vec![
+                    Cell::new(&output.label)
+                        .fg(Color::Yellow)
+                        .add_attribute(Attribute::Bold),
+                    Cell::new(format!("Error: {}", e)).fg(Color::Red),
+                ]);
             }
         }
     }
+
+    let table_string = table.to_string();
+    for line in table_string.lines() {
+        writeln!(writer, "{}{}", margin, line).ok();
+    }
+    writeln!(writer).ok();
 }
 
 fn format_datetime(datetime: &DateTime<Utc>, format: &OutputFormat) -> Result<String> {
@@ -172,15 +202,12 @@ mod tests {
         print_output(&mut output, &dt, &settings);
         let output_str = String::from_utf8(output).unwrap();
 
-        // Verify the output contains expected strings
-        assert!(output_str.contains("UTC:"));
+        // Verify the output contains expected strings (without color codes for testing)
+        assert!(output_str.contains("Timestamp Conversions"));
         assert!(output_str.contains("2006-01-02"));
-        assert!(output_str.contains("Local:"));
-        assert!(output_str.contains("Unix:"));
+        assert!(output_str.contains("Local"));
+        assert!(output_str.contains("UTC"));
+        assert!(output_str.contains("Unix"));
         assert!(output_str.contains("1136214245"));
-
-        // Verify the output has all three lines
-        let lines: Vec<&str> = output_str.lines().collect();
-        assert_eq!(lines.len(), 3);
     }
 }
