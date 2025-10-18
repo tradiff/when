@@ -1,14 +1,12 @@
 mod config;
+mod output_printer;
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Utc};
-use chrono_tz::Tz;
 use clap::Parser;
 use colored::Colorize;
-use comfy_table::modifiers::UTF8_ROUND_CORNERS;
-use comfy_table::presets::UTF8_BORDERS_ONLY;
-use comfy_table::{Attribute, Cell, Color, ContentArrangement, Table};
-use config::{OutputFormat, Settings};
+use config::Settings;
+use output_printer::OutputPrinter;
 
 /// Parse timestamps in various formats
 #[derive(Parser, Debug)]
@@ -26,7 +24,7 @@ fn main() -> Result<()> {
     let args = Args::parse();
 
     let datetime = parse_input(args.timestamp)?;
-    print_output(&mut std::io::stdout(), &datetime, &settings);
+    OutputPrinter::print(&mut std::io::stdout(), &datetime, &settings);
 
     Ok(())
 }
@@ -55,83 +53,6 @@ fn parse_timestamp(input: &str) -> Result<DateTime<Utc>> {
     }
 
     anyhow::bail!("Unable to parse timestamp: '{}'", input)
-}
-
-fn print_output<W: std::io::Write>(writer: &mut W, datetime: &DateTime<Utc>, settings: &Settings) {
-    writeln!(writer).ok();
-    let margin = "  ";
-    writeln!(
-        writer,
-        "{}{}",
-        margin,
-        "Timestamp Conversions".bold().bright_cyan()
-    )
-    .ok();
-
-    let mut table = Table::new();
-    table
-        .load_preset(UTF8_BORDERS_ONLY)
-        .apply_modifier(UTF8_ROUND_CORNERS)
-        .set_content_arrangement(ContentArrangement::Dynamic);
-
-    for output in &settings.outputs {
-        match format_datetime(datetime, &output.format) {
-            Ok(formatted) => {
-                table.add_row(vec![
-                    Cell::new(&output.label).fg(Color::Yellow),
-                    Cell::new(formatted).fg(Color::White),
-                ]);
-            }
-            Err(e) => {
-                table.add_row(vec![
-                    Cell::new(&output.label)
-                        .fg(Color::Yellow)
-                        .add_attribute(Attribute::Bold),
-                    Cell::new(format!("Error: {}", e)).fg(Color::Red),
-                ]);
-            }
-        }
-    }
-
-    let table_string = table.to_string();
-    for line in table_string.lines() {
-        writeln!(writer, "{}{}", margin, line).ok();
-    }
-    writeln!(writer).ok();
-}
-
-fn format_datetime(datetime: &DateTime<Utc>, format: &OutputFormat) -> Result<String> {
-    match format {
-        OutputFormat::Rfc3339 { timezone } | OutputFormat::Iso8601 { timezone } => {
-            let dt = with_timezone(datetime, timezone.as_deref())?;
-            Ok(dt.to_rfc3339_opts(chrono::SecondsFormat::Secs, true))
-        }
-        OutputFormat::Rfc2822 { timezone } => {
-            let dt = with_timezone(datetime, timezone.as_deref())?;
-            Ok(dt.to_rfc2822())
-        }
-        OutputFormat::Unix => Ok(datetime.timestamp().to_string()),
-        OutputFormat::UnixMillis => Ok(datetime.timestamp_millis().to_string()),
-        OutputFormat::Custom { format, timezone } => {
-            let dt = with_timezone(datetime, timezone.as_deref())?;
-            Ok(dt.format(format).to_string())
-        }
-    }
-}
-
-fn with_timezone(
-    datetime: &DateTime<Utc>,
-    timezone: Option<&str>,
-) -> Result<DateTime<chrono::FixedOffset>> {
-    match timezone {
-        Some(tz_str) => {
-            let tz: Tz = tz_str
-                .parse()
-                .context(format!("Invalid timezone: {}", tz_str))?;
-            Ok(datetime.with_timezone(&tz).fixed_offset())
-        }
-        None => Ok(datetime.with_timezone(&chrono::Local).fixed_offset()),
-    }
 }
 
 #[cfg(test)]
@@ -199,7 +120,7 @@ mod tests {
 
         // Capture the output
         let mut output = Vec::new();
-        print_output(&mut output, &dt, &settings);
+        OutputPrinter::print(&mut output, &dt, &settings);
         let output_str = String::from_utf8(output).unwrap();
 
         // Verify the output contains expected strings (without color codes for testing)
