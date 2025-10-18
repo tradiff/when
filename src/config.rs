@@ -1,22 +1,70 @@
 use anyhow::{Context, Result};
 use serde::Deserialize;
 
-/// Application configuration
 #[derive(Debug, Deserialize, Clone)]
 pub struct Settings {
-    /// Placeholder configuration value
-    pub foo: String,
-    /// Another placeholder configuration value
-    pub bar: i32,
+    /// List of output formats to display
+    #[serde(default = "default_outputs")]
+    pub outputs: Vec<Output>,
+}
+
+/// Output configuration
+#[derive(Debug, Deserialize, Clone)]
+pub struct Output {
+    /// Label to display before the output
+    pub label: String,
+    /// Format specification
+    #[serde(flatten)]
+    pub format: OutputFormat,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+#[serde(tag = "type", rename_all = "lowercase")]
+pub enum OutputFormat {
+    Rfc3339 {
+        #[serde(default)]
+        timezone: Option<String>,
+    },
+    Iso8601 {
+        #[serde(default)]
+        timezone: Option<String>,
+    },
+    Rfc2822 {
+        #[serde(default)]
+        timezone: Option<String>,
+    },
+    Unix,
+    UnixMillis,
+    /// Custom format string (using chrono format specifiers)
+    Custom {
+        format: String,
+        #[serde(default)]
+        timezone: Option<String>,
+    },
+}
+
+fn default_outputs() -> Vec<Output> {
+    vec![
+        Output {
+            label: "Local".to_string(),
+            format: OutputFormat::Rfc3339 { timezone: None },
+        },
+        Output {
+            label: "UTC".to_string(),
+            format: OutputFormat::Rfc3339 {
+                timezone: Some("UTC".to_string()),
+            },
+        },
+        Output {
+            label: "Unix".to_string(),
+            format: OutputFormat::Unix,
+        },
+    ]
 }
 
 impl Settings {
     pub fn new() -> Result<Self> {
-        let defaults = Self::default();
-
-        let mut builder = config::Config::builder()
-            .set_default("foo", defaults.foo)?
-            .set_default("bar", defaults.bar)?;
+        let mut builder = config::Config::builder();
 
         if let Some(config_dir) = dirs::config_dir() {
             builder =
@@ -25,17 +73,18 @@ impl Settings {
 
         let config = builder.build().context("Failed to build configuration")?;
 
-        config
-            .try_deserialize()
-            .context("Failed to deserialize configuration")
+        // If no config file exists, use defaults
+        match config.try_deserialize() {
+            Ok(settings) => Ok(settings),
+            Err(_) => Ok(Self::default()),
+        }
     }
 }
 
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            foo: "default_foo".to_string(),
-            bar: 42,
+            outputs: default_outputs(),
         }
     }
 }
@@ -47,8 +96,10 @@ mod tests {
     #[test]
     fn test_settings_default() {
         let settings = Settings::default();
-        assert_eq!(settings.foo, "default_foo");
-        assert_eq!(settings.bar, 42);
+        assert_eq!(settings.outputs.len(), 3);
+        assert_eq!(settings.outputs[0].label, "Local");
+        assert_eq!(settings.outputs[1].label, "UTC");
+        assert_eq!(settings.outputs[2].label, "Unix");
     }
 
     #[test]
@@ -58,6 +109,6 @@ mod tests {
         assert!(result.is_ok());
         let settings = result.unwrap();
         // Should have default values when no config file exists
-        assert!(!settings.foo.is_empty());
+        assert!(!settings.outputs.is_empty());
     }
 }

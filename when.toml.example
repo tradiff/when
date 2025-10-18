@@ -1,6 +1,38 @@
 # Example configuration file for the 'when' application
 # Copy this file to ~/.config/when.toml
 
-# Placeholder configuration values
-foo = "example_value"
-bar = 123
+# Output formats - configure as many as you want!
+
+[[outputs]]
+label = "UTC"
+type = "rfc3339"
+timezone = "UTC"
+
+[[outputs]]
+label = "Local"
+type = "rfc3339"
+# timezone is optional - if omitted, uses local timezone
+
+[[outputs]]
+label = "Unix"
+type = "unix"
+
+# Unix timestamp in milliseconds
+[[outputs]]
+label = "Unix (ms)"
+type = "unixmillis"
+
+# RFC 2822 format with specific timezone
+[[outputs]]
+label = "New York"
+type = "rfc2822"
+timezone = "America/New_York"
+
+# Custom format with timezone
+# Uses chrono format specifiers: https://docs.rs/chrono/latest/chrono/format/strftime/index.html
+[[outputs]]
+label = "London"
+type = "custom"
+format = "%Y-%m-%d %H:%M:%S %Z"
+timezone = "Europe/London"
+
